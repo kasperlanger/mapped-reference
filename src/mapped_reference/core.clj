@@ -1,30 +1,59 @@
-(ns mapped-reference.core)
+(ns mapped-reference.core
+  (:use clojure.contrib.generic.functor))
 
-(defprotocol MappedAtomProtocol
-  (mapped-swap! [this fn]))
+(defprotocol RepresentationProtocol
+  (rep-swap! [this fun]))
 
 (extend clojure.lang.Atom
-  MappedAtomProtocol
-  {:mapped-swap! clojure.core/swap!})
+  RepresentationProtocol {:rep-swap! clojure.core/swap!})
     
-(deftype MappedAtom [atom-ref map-fn update-fn]
-  MappedAtomProtocol
-  (mapped-swap! [this fun]
-		(map-fn (mapped-swap!
-				atom-ref 
-				(fn [old] (update-fn old (fun (map-fn old)))))))
+(defrecord Representation [reference rep-fn ref-update]
+  RepresentationProtocol
+  (rep-swap! [this fun]
+	     (rep-fn (rep-swap! reference
+				(fn [old]
+				  (ref-update old (fun (rep-fn old)))))))
 
   clojure.lang.IRef
-  (deref [this] (map-fn @atom-ref))
-  (removeWatch [this key] (remove-watch atom-ref [this key]))
+  (deref [this] (rep-fn @reference))
+  (removeWatch [this key] (remove-watch reference [this key]))
   (addWatch [this key callback]
-	    (add-watch atom-ref
+	    (add-watch reference
 		       [this key] 
 		       (fn [key ref old-val new-val]
-			 (let [mapped-old (map-fn old-val)
-			       mapped-new (map-fn new-val)]
-			   (when (not= mapped-old mapped-new)
-			     (callback key ref mapped-old mapped-new)))))))
+			 (let [old-rep (rep-fn old-val)
+			       new-rep (rep-fn new-val)]
+			   (when (not= old-rep new-rep)
+			     (callback key ref old-rep new-rep)))))))
   
-(defn mapped-atom [atom-ref map-fn update-fn]
-  (MappedAtom. atom-ref map-fn update-fn))
+(defn rep [atom-ref rep-fn ref-update]
+  (Representation. atom-ref rep-fn ref-update))
+
+(defrecord MultipleRepresentation [reference reps-map]
+  clojure.lang.IRef
+  (deref [this]
+	 (let [val @reference]
+	   (fmap #((:rep-fn %) val) reps-map)))
+  (removeWatch [this key] (remove-watch reference [this key]))
+  (addWatch [this key callback]
+	    (add-watch reference
+		       [this key]
+		       (fn [key ref old-val new-val]
+			 (let [old-rep (fmap #((:rep-fn %) old-val) reps-map)
+			       new-rep (fmap #((:rep-fn %) new-val) reps-map)]
+			   (when (not= old-rep new-rep)
+			     (callback key ref old-rep new-rep)))))))
+		         
+(defn multi-rep [& args]
+  (let [m (apply hash-map args)
+	wrap (fn [ref] (rep ref identity (fn [_ val] val)))
+	m (fmap (fn [v] (if (= (type v) Representation) v (wrap v))) m)
+	same-ref? (apply = (map :reference (vals m)))]
+    (if (not same-ref?)
+      (throw (IllegalArgumentException.
+	      (str
+	       "arguments do not represent the same reference."
+	       "foo"
+	      (map :reference (vals m))
+	      )))
+      (MultipleRepresentation. (:reference (first (vals m))) m))))
