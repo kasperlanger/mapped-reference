@@ -29,19 +29,12 @@
 (defn rep [atom-ref rep-fn ref-update]
   (Representation. atom-ref rep-fn ref-update (gensym)))
 
-(defn- rep?
-  [val]
-  (condp = (type val)
-      clojure.lang.Atom true
-      mapped-reference.core.Representation true
-      false))
-
 (defn mapping
   [rep-fn ref-update]
   (fn [ref-kw-val]
     (condp = ref-kw-val
 	:rep-fn rep-fn
 	:ref-update ref-update
-	(if (rep? ref-kw-val)
+	(if (satisfies? RepresentationProtocol ref-kw-val)
 	  (rep ref-kw-val rep-fn ref-update)
 	  (rep-fn ref-kw-val)))))
