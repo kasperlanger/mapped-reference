@@ -1,8 +1,20 @@
 (ns mapped-reference.float
   (:use mapped-reference.core))
 
-(defn affine-atom [atom-ref a b]
-  "atom-ref should contain a floating point value. Maps x to x*a + b: @affine-atom -> (+ (* @atom-ref a) b))"
-  (rep atom-ref
-       (fn [x] (float (+ (* x a) b)))
-       (fn [_ y] (float (/ (- y b) a)))))
+(defn bijective-mapping
+  [f f-inv]
+  (mapping
+   (fn [x] (f x))
+   (fn [old y] (f-inv y))))
+
+(defn affine-mapping
+  [a b]
+  (bijective-mapping
+   #(+ (* % a) b)
+   #(/ (- % b) a)))
+
+(def float-to-str
+     (bijective-mapping (comp str float) #(Float/parseFloat %)))
+
+(def str-to-float
+     (bijective-mapping #(Float/parseFloat %) (comp str float)))

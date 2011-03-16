@@ -1,28 +1,32 @@
 (ns mapped-reference.examples
-  (:use (mapped-reference float core)))
+  (:use (mapped-reference float core cond associative)))
 
-(def celcius (atom 0))
+(def c-to-f (affine-mapping 9/5 32))
 
-(def farenheit (affine-atom celcius 9/5 32))
+(c-to-f 0) ;; -> 32
+(c-to-f 10) ;; -> 50
 
-(defn pr-status []
-  (println "c:" @celcius "f:" @farenheit))
+(def c (atom 0))
+(def f (c-to-f c))
 
-(pr-status) ;; c: 0 f: 32.0
+@c ;; -> 0
+@f ;; -> 32
+(rep-swap! c inc) ;; -> 1
+@f ;; -> 169/5
+(float @f) ;;-> 33.8
 
-(rep-swap! celcius inc)
+(def f-str (-> c c-to-f float-to-str))
+@f-str ;;-> 33.8
+(rep-swap! f-str (constantly "32")) ;; -> "32.0"
+@c ;;-> 0.0
 
-(pr-status) ;; c: 1 f: 33.8
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(rep-swap! farenheit inc)
+(def m (atom {:x 5 :y 7}))
 
-(pr-status) ;; c: 1.5555552 f: 34.8
+(let [doubler (bijective-mapping (partial * 2) (partial * 0.5))
+      select-x (sub-mapping :x)]
+  (def x (-> m select-x doubler)))
 
-(def cv (multi-rep :celcius celcius :farenheit farenheit))
-
-(def a (atom 0))
-; (def aev (compound-view :celcius a :farenheit farenheit))
-					; => throws IllegalArgumentException
-
-(remove-watch cv :foo)
-(add-watch cv :foo #(println %4))
+@x ;; -> 10
+(rep-swap! x inc) ;; -> 12

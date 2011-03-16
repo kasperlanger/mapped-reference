@@ -7,7 +7,7 @@
 (extend clojure.lang.Atom
   RepresentationProtocol {:rep-swap! clojure.core/swap!})
     
-(defrecord Representation [reference rep-fn ref-update]
+(defrecord Representation [reference rep-fn ref-update secret-key]
   RepresentationProtocol
   (rep-swap! [this fun]
 	     (rep-fn (rep-swap! reference
@@ -16,44 +16,32 @@
 
   clojure.lang.IRef
   (deref [this] (rep-fn @reference))
-  (removeWatch [this key] (remove-watch reference [this key]))
+  (removeWatch [this key] (remove-watch reference [secret-key key]))
   (addWatch [this key callback]
 	    (add-watch reference
-		       [this key] 
-		       (fn [key ref old-val new-val]
+		       [secret-key key] 
+		       (fn [_ _ old-val new-val]
 			 (let [old-rep (rep-fn old-val)
 			       new-rep (rep-fn new-val)]
 			   (when (not= old-rep new-rep)
-			     (callback key ref old-rep new-rep)))))))
+			     (callback key this old-rep new-rep)))))))
   
 (defn rep [atom-ref rep-fn ref-update]
-  (Representation. atom-ref rep-fn ref-update))
+  (Representation. atom-ref rep-fn ref-update (gensym)))
 
-(defrecord MultipleRepresentation [reference reps-map]
-  clojure.lang.IRef
-  (deref [this]
-	 (let [val @reference]
-	   (fmap #((:rep-fn %) val) reps-map)))
-  (removeWatch [this key] (remove-watch reference [this key]))
-  (addWatch [this key callback]
-	    (add-watch reference
-		       [this key]
-		       (fn [key ref old-val new-val]
-			 (let [old-rep (fmap #((:rep-fn %) old-val) reps-map)
-			       new-rep (fmap #((:rep-fn %) new-val) reps-map)]
-			   (when (not= old-rep new-rep)
-			     (callback key ref old-rep new-rep)))))))
-		         
-(defn multi-rep [& args]
-  (let [m (apply hash-map args)
-	wrap (fn [ref] (rep ref identity (fn [_ val] val)))
-	m (fmap (fn [v] (if (= (type v) Representation) v (wrap v))) m)
-	same-ref? (apply = (map :reference (vals m)))]
-    (if (not same-ref?)
-      (throw (IllegalArgumentException.
-	      (str
-	       "arguments do not represent the same reference."
-	       "foo"
-	      (map :reference (vals m))
-	      )))
-      (MultipleRepresentation. (:reference (first (vals m))) m))))
+(defn- rep?
+  [val]
+  (condp = (type val)
+      clojure.lang.Atom true
+      mapped-reference.core.Representation true
+      false))
+
+(defn mapping
+  [rep-fn ref-update]
+  (fn [ref-kw-val]
+    (condp = ref-kw-val
+	:rep-fn rep-fn
+	:ref-update ref-update
+	(if (rep? ref-kw-val)
+	  (rep ref-kw-val rep-fn ref-update)
+	  (rep-fn ref-kw-val)))))
