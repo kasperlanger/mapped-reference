@@ -1,5 +1,5 @@
 (ns mapped-reference.examples
-  (:use (mapped-reference float core cond associative)))
+  (:use (mapped-reference float core associative)))
 
 (def c-to-f (affine-mapping 9/5 32))
 
