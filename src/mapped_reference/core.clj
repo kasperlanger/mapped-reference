@@ -25,9 +25,6 @@
 			       new-rep (rep-fn new-val)]
 			   (when (not= old-rep new-rep)
 			     (callback key this old-rep new-rep)))))))
-  
-(defn rep [atom-ref rep-fn ref-update]
-  (Representation. atom-ref rep-fn ref-update (gensym)))
 
 (defn mapping
   [rep-fn ref-update]
@@ -36,5 +33,5 @@
 	:rep-fn rep-fn
 	:ref-update ref-update
 	(if (satisfies? RepresentationProtocol ref-kw-val)
-	  (rep ref-kw-val rep-fn ref-update)
+	  (Representation. ref-kw-val rep-fn ref-update (gensym))
 	  (rep-fn ref-kw-val)))))
